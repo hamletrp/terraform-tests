@@ -3,6 +3,11 @@ variable "eks_role_name" {
   default = "eks-cluster-autoscaler-role"
 }
 
+variable "AWS_REGION" {
+  type    = string
+  default = "us-east-1"
+}
+
 variable "AWS_ACC_ID" {
   type    = string
   default = "722249351142"
@@ -10,5 +15,19 @@ variable "AWS_ACC_ID" {
 
 variable "oidc_provider" {
   type    = string
-  default = "oidc.eks.us-east-1.amazonaws.com/id/DC1A7CD17A3AF9F88667AE58F1EF2A03"
+  default = ""
+}
+
+variable "oidc_provider_url" {
+  type    = string
+  default = ""
+}
+
+variable "nodegroup_name" {
+  type    = string
+  default = "linux-nodes"
+}
+variable "cluster_name" {
+  type    = string
+  default = "cluster-lab4"
 }
