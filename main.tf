@@ -96,11 +96,16 @@ resource "aws_iam_policy" "eks_node_group_role_inline_policy" {
         Effect = "Allow",
         Action = [
           "ec2:CreateVolume",
-          "ec2:CreateTags"
+          "ec2:CreateTags",
+          "ec2:AttachVolume",
+          "ec2:DetachVolume",
+          "ec2:DeleteVolume"
         ],
         Resource = [
           "arn:aws:ec2:${var.AWS_REGION}:${var.AWS_ACC_ID}:volume/",
-          "arn:aws:ec2:${var.AWS_REGION}:${var.AWS_ACC_ID}:volume/*"
+          "arn:aws:ec2:${var.AWS_REGION}:${var.AWS_ACC_ID}:volume/*",
+          "arn:aws:ec2:${var.AWS_REGION}:${var.AWS_ACC_ID}:instance/",
+          "arn:aws:ec2:${var.AWS_REGION}:${var.AWS_ACC_ID}:instance/*"
         ]
       }
     ]
