@@ -29,13 +29,6 @@ resource "aws_iam_policy" "cluster_autoscaler_policy" {
         ],
         Resource = "*"
       }
-      # ,{
-      #   Effect = "Allow",
-      #   Action = [
-      #     "ec2:CreateVolume"
-      #   ],
-      #   Resource = " arn:aws:ec2:${var.AWS_REGION}:${var.AWS_ACC_ID}:volume/*"
-      # }
     ]
   })
 }
@@ -86,8 +79,8 @@ resource "aws_iam_role_policy_attachment" "AmazonSSMManagedInstanceCore" {
 }
 
 resource "aws_iam_policy" "eks_node_group_role_inline_policy" {
-  name        = "eks-cluster-autoscaler-inline-policy"
-  description = "Policy for EKS ece instance nodes role"
+  name        = "eks-node-group-inline-policy"
+  description = "Policy for ec2 instance nodes role"
 
   policy = jsonencode({
     Version = "2012-10-17",
@@ -96,10 +89,10 @@ resource "aws_iam_policy" "eks_node_group_role_inline_policy" {
         Effect = "Allow",
         Action = [
           "ec2:CreateVolume",
-          "ec2:CreateTags",
           "ec2:AttachVolume",
           "ec2:DetachVolume",
-          "ec2:DeleteVolume"
+          "ec2:DeleteVolume",
+          "ec2:CreateTags"
         ],
         Resource = [
           "arn:aws:ec2:${var.AWS_REGION}:${var.AWS_ACC_ID}:volume/",
