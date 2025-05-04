@@ -92,14 +92,10 @@ resource "aws_iam_policy" "eks_node_group_role_inline_policy" {
           "ec2:AttachVolume",
           "ec2:DetachVolume",
           "ec2:DeleteVolume",
-          "ec2:CreateTags"
+          "ec2:CreateTags",
+          "elasticloadbalancing:DescribeLoadBalancers"
         ],
-        Resource = [
-          "arn:aws:ec2:${var.AWS_REGION}:${var.AWS_ACC_ID}:volume/",
-          "arn:aws:ec2:${var.AWS_REGION}:${var.AWS_ACC_ID}:volume/*",
-          "arn:aws:ec2:${var.AWS_REGION}:${var.AWS_ACC_ID}:instance/",
-          "arn:aws:ec2:${var.AWS_REGION}:${var.AWS_ACC_ID}:instance/*"
-        ]
+        Resource = ["*"]
       }
     ]
   })
@@ -136,4 +132,46 @@ resource "aws_iam_policy" "ebs_csi_driver_policy" {
 resource "aws_iam_role_policy_attachment" "ebs_csi_attach" {
   role       = aws_iam_role.ebs_csi_driver_role.name
   policy_arn = aws_iam_policy.ebs_csi_driver_policy.arn
+}
+
+resource "aws_iam_role" "eks_alb_controller_irsa_role" {
+  name = "eks-alb-controller-role"
+  assume_role_policy = data.aws_iam_policy_document.assume_role_policy_oidc_provider.json
+}
+
+resource "aws_iam_policy" "alb_controller_policy" {
+  name = "AWSLoadBalancerControllerIAMPolicy"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "acm:DescribeCertificate",
+          "acm:ListCertificates",
+          "acm:GetCertificate",
+          "elasticloadbalancing:AddListenerCertificates",
+          "elasticloadbalancing:ModifyListener",
+          "elasticloadbalancing:DescribeListeners",
+          "elasticloadbalancing:CreateLoadBalancer",
+          "elasticloadbalancing:DeleteLoadBalancer",
+          "elasticloadbalancing:CreateTargetGroup",
+          "elasticloadbalancing:DeleteTargetGroup",
+          "elasticloadbalancing:RegisterTargets",
+          "elasticloadbalancing:DeregisterTargets",
+          "elasticloadbalancing:Describe*",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeVpcs",
+          "ec2:DescribeSecurityGroups",
+          "iam:CreateServiceLinkedRole"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "alb_controller_attach" {
+  role       = aws_iam_role.eks_alb_controller_irsa_role.name
+  policy_arn = aws_iam_policy.alb_controller_policy.arn
 }
