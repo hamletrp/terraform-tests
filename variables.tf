@@ -31,3 +31,14 @@ variable "cluster_name" {
   type    = string
   default = "cluster-lab4"
 }
+
+variable "terraform_s3_bucket_name" {
+  type    = string
+  default = "terraform-state-bucket-3cbash"
+}
+
+variable "terraform_dynamodb_table_name" {
+  type    = string
+  default = "terraform-locks"
+}
+

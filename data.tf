@@ -46,7 +46,9 @@ data "aws_iam_policy_document" "ebs_csi_driver_doc" {
       "ec2:CreateSnapshot",
       "ec2:DeleteSnapshot",
       "ec2:CreateTags",
-      "ec2:DeleteTags"
+      "ec2:DeleteTags",
+      "ec2:CreateVolume",
+      "ec2:DeleteVolume"
     ]
     resources = ["*"]
   }

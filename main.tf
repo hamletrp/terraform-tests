@@ -175,3 +175,27 @@ resource "aws_iam_role_policy_attachment" "alb_controller_attach" {
   role       = aws_iam_role.eks_alb_controller_irsa_role.name
   policy_arn = aws_iam_policy.alb_controller_policy.arn
 }
+
+resource "aws_s3_bucket" "terraform_state" {
+  bucket = var.terraform_s3_bucket_name
+  force_destroy = true
+  tags = {
+    Name        = "Terraform State Bucket"
+  }
+}
+
+
+resource "aws_dynamodb_table" "terraform_locks" {
+  name         = var.terraform_dynamodb_table_name
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "LockID"
+
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+
+  tags = {
+    Name        = "Terraform Lock Table"
+  }
+}
