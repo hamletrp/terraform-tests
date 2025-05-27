@@ -4,12 +4,12 @@ provider "aws" {
 }
 
 resource "aws_iam_role" "cluster_autoscaler_role" {
-  name = var.eks_role_name
+  name = "${var.eks_role_name}-${var.cluster_name}"
   assume_role_policy = data.aws_iam_policy_document.assume_role_policy_oidc_provider.json
 }
 
 resource "aws_iam_policy" "cluster_autoscaler_policy" {
-  name        = "eks-cluster-autoscaler-policy"
+  name        = "eks-cluster-autoscaler-policy-${var.cluster_name}"
   description = "Policy for EKS Cluster Autoscaler"
 
   policy = jsonencode({
@@ -46,7 +46,7 @@ resource "aws_iam_role" "eks_node_group_role" {
   tags = {
     "alpha.eksctl.io/nodegroup-name"                    = "${var.nodegroup_name}"
     "k8s.io/cluster-autoscaler/${var.cluster_name}"     = "owned"
-    "environment"                                       = "staging"
+    "environment"                                       = "${var.environment}"
     "alpha.eksctl.io/cluster-name"                      = "${var.cluster_name}"
     "eksctl.cluster.k8s.io/v1alpha1/cluster-name"       = "${var.cluster_name}"
     "alpha.eksctl.io/nodegroup-type"                    = "managed"
@@ -79,7 +79,7 @@ resource "aws_iam_role_policy_attachment" "AmazonSSMManagedInstanceCore" {
 }
 
 resource "aws_iam_policy" "eks_node_group_role_inline_policy" {
-  name        = "eks-node-group-inline-policy"
+  name        = "eks-node-group-inline-policy-${var.cluster_name}"
   description = "Policy for ec2 instance nodes role"
 
   policy = jsonencode({
@@ -109,7 +109,7 @@ resource "aws_iam_role_policy_attachment" "attach_eks_node_group_role_inline_pol
 
 # IAM Role for EBS CSI driver with trust relationship to EKS OIDC provider
 resource "aws_iam_role" "ebs_csi_driver_role" {
-  name = "AmazonEKS_EBS_CSI_DriverRole"
+  name = "AmazonEKS_EBS_CSI_DriverRole-${var.cluster_name}"
 
   assume_role_policy = data.aws_iam_policy_document.assume_role_policy_oidc_provider.json
 
@@ -123,7 +123,7 @@ resource "aws_iam_role" "ebs_csi_driver_role" {
 
 # IAM Policy for EBS CSI Driver
 resource "aws_iam_policy" "ebs_csi_driver_policy" {
-  name        = "AmazonEKS_EBS_CSI_Driver_Policy"
+  name        = "AmazonEKS_EBS_CSI_Driver_Policy-${var.cluster_name}"
   description = "Custom policy for EBS CSI driver using IRSA"
   policy      = data.aws_iam_policy_document.ebs_csi_driver_doc.json
 }
@@ -135,12 +135,12 @@ resource "aws_iam_role_policy_attachment" "ebs_csi_attach" {
 }
 
 resource "aws_iam_role" "eks_alb_controller_irsa_role" {
-  name = "eks-alb-controller-role"
+  name = "eks-alb-controller-role-${var.cluster_name}"
   assume_role_policy = data.aws_iam_policy_document.assume_role_policy_oidc_provider.json
 }
 
 resource "aws_iam_policy" "alb_controller_policy" {
-  name = "AWSLoadBalancerControllerIAMPolicy"
+  name = "AWSLoadBalancerControllerIAMPolicy-${var.cluster_name}"
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
@@ -176,26 +176,54 @@ resource "aws_iam_role_policy_attachment" "alb_controller_attach" {
   policy_arn = aws_iam_policy.alb_controller_policy.arn
 }
 
-resource "aws_s3_bucket" "terraform_state" {
-  bucket = var.terraform_s3_bucket_name
-  force_destroy = true
+resource "aws_iam_role" "eks_cni_role" {
+  name = "AmazonEKS_CNI_Role-${var.cluster_name}"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Service = "eks.amazonaws.com"
+        },
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
   tags = {
-    Name        = "Terraform State Bucket"
+    Name        = "AmazonEKS_CNI_Role-${var.cluster_name}"
+    Environment = "${var.environment}"
   }
 }
 
-
-resource "aws_dynamodb_table" "terraform_locks" {
-  name         = var.terraform_dynamodb_table_name
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "LockID"
-
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-
-  tags = {
-    Name        = "Terraform Lock Table"
-  }
+resource "aws_iam_role_policy_attachment" "eks_cni_policy_attach" {
+  role       = aws_iam_role.eks_cni_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
 }
+
+
+
+## comment out cuz deploying a new cluster
+# resource "aws_s3_bucket" "terraform_state" {
+#   bucket = var.terraform_s3_bucket_name
+#   force_destroy = true
+#   tags = {
+#     Name        = "Terraform State Bucket"
+#   }
+# }
+
+
+# resource "aws_dynamodb_table" "terraform_locks" {
+#   name         = var.terraform_dynamodb_table_name
+#   billing_mode = "PAY_PER_REQUEST"
+#   hash_key     = "LockID"
+
+#   attribute {
+#     name = "LockID"
+#     type = "S"
+#   }
+
+#   tags = {
+#     Name        = "Terraform Lock Table"
+#   }
+# }

@@ -23,13 +23,17 @@ variable "oidc_provider_url" {
   default = ""
 }
 
+variable "environment" {
+  type    = string
+  default = "staging"
+}
+
 variable "nodegroup_name" {
   type    = string
   default = "linux-nodes"
 }
 variable "cluster_name" {
   type    = string
-  default = "cluster-lab4"
 }
 
 variable "terraform_s3_bucket_name" {

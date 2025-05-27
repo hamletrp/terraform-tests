@@ -13,3 +13,7 @@ output "ebs_csi_driver_role_arn" {
 output "eks_alb_controller_irsa_role_arn" {
   value = aws_iam_role.eks_alb_controller_irsa_role.arn
 }
+
+output "eks_cni_role_arn" {
+  value = aws_iam_role.eks_cni_role.arn
+}
