@@ -22,10 +22,11 @@ data "aws_iam_policy_document" "assume_role_policy_oidc_provider" {
     condition {
       test     = "StringEquals"
       variable = "${replace(var.oidc_provider_url, "https://", "")}:sub"
-      values   = [
+      values = [
         "system:serviceaccount:kube-system:cluster-autoscaler-aws-cluster-autoscaler",
         "system:serviceaccount:kube-system:ebs-csi-controller-sa",
-        "system:serviceaccount:ingress-nginx:nginx-ingress-ingress-nginx"
+        "system:serviceaccount:ingress-nginx:nginx-ingress-ingress-nginx",
+        "system:serviceaccount:kube-system:aws-load-balancer-controller-sa"
       ]
     }
   }

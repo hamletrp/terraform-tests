@@ -33,7 +33,7 @@ variable "nodegroup_name" {
   default = "linux-nodes"
 }
 variable "cluster_name" {
-  type    = string
+  type = string
 }
 
 variable "terraform_s3_bucket_name" {
