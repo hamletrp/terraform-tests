@@ -46,3 +46,8 @@ variable "terraform_dynamodb_table_name" {
   default = "terraform-locks"
 }
 
+variable "managed_node_group_name" {
+  type    = string
+}
+
+

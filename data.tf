@@ -11,6 +11,8 @@ data "aws_iam_policy_document" "eks_assume_role_policy" {
   }
 }
 
+data "aws_availability_zones" "available" {}
+
 data "aws_iam_policy_document" "assume_role_policy_oidc_provider" {
   statement {
     effect = "Allow"
@@ -26,7 +28,9 @@ data "aws_iam_policy_document" "assume_role_policy_oidc_provider" {
         "system:serviceaccount:kube-system:cluster-autoscaler-aws-cluster-autoscaler",
         "system:serviceaccount:kube-system:ebs-csi-controller-sa",
         "system:serviceaccount:ingress-nginx:nginx-ingress-ingress-nginx",
-        "system:serviceaccount:kube-system:aws-load-balancer-controller-sa"
+        "system:serviceaccount:kube-system:aws-load-balancer-controller-sa",
+        "system:serviceaccount:external-secrets:external-secrets-aws-sa",
+        "system:serviceaccount:kube-system:karpenter"
       ]
     }
   }

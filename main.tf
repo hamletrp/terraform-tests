@@ -441,6 +441,225 @@ resource "aws_iam_role_policy_attachment" "attach_lb_controller_policy" {
   policy_arn = "arn:aws:iam::${var.AWS_ACC_ID}:policy/AWSLoadBalancerControllerIAMPolicy-${var.cluster_name}"
 }
 
+resource "aws_iam_role" "eso_irsa_role" {
+  name               = "eso-irsa-role-${var.cluster_name}"
+  assume_role_policy = data.aws_iam_policy_document.assume_role_policy_oidc_provider.json
+}
+
+resource "aws_iam_role_policy_attachment" "eso_irsa_policy_attach" {
+  role       = aws_iam_role.eso_irsa_role.name
+  policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite" # or create custom policy with minimal access
+}
+
+resource "aws_iam_role_policy_attachment" "eso_irsa_policy_attach_2" {
+  role       = aws_iam_role.eso_irsa_role.name
+  policy_arn = "arn:aws:iam::722249351142:policy/SSMParamStore-FullRead" # or create custom policy with minimal access
+}
+
+resource "aws_iam_role" "karpenter_nodes_role" {
+  name               = "eksctl-${var.cluster_name}-karpenter-nodes-role"
+  path               = "/"
+  assume_role_policy = data.aws_iam_policy_document.eks_assume_role_policy.json
+
+  tags = {
+    "alpha.eksctl.io/nodegroup-name"                = "${var.nodegroup_name}"
+    "environment"                                   = "${var.environment}"
+    "alpha.eksctl.io/cluster-name"                  = "${var.cluster_name}"
+    "eksctl.cluster.k8s.io/v1alpha1/cluster-name"   = "${var.cluster_name}"
+    "alpha.eksctl.io/nodegroup-type"                = "managed"
+    "team"                                          = "platform"
+    "alpha.eksctl.io/eksctl-version"                = "0.207.0"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "karpenter_node_policy" {
+  role       = aws_iam_role.karpenter_nodes_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+}
+
+resource "aws_iam_instance_profile" "karpenter_instance_profile" {
+  name = "KarpenterInstanceProfile-${var.cluster_name}"
+  role = aws_iam_role.karpenter_nodes_role.name
+}
+
+resource "aws_iam_role" "karpenter_controller_role" {
+  name               = "KarpenterControllerRole-${var.cluster_name}"
+  assume_role_policy = data.aws_iam_policy_document.assume_role_policy_oidc_provider.json
+}
+
+resource "aws_iam_role_policy" "karpenter_controller_inline" {
+  name = "KarpenterControllerPolicy-${var.cluster_name}"
+  role = aws_iam_role.karpenter_controller_role.name
+  policy = file("karpenter-controller-policy.json")
+}
+
+resource "aws_sqs_queue" "karpenter_interruption_queue" {
+  name                      = "karpenter-interruption-queue-${var.cluster_name}"
+  message_retention_seconds = 300  # 5 minutes
+  visibility_timeout_seconds = 30
+
+  tags = {
+    Environment = "${var.environment}"
+    Application = "karpenter"
+  }
+}
+
+resource "aws_iam_policy" "karpenter_sqs_access_policy" {
+  name        = "karpenter_sqs_access_policy-${var.cluster_name}"
+  description = "Policy karpenter interrumption queue"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:GetQueueUrl",
+          "sqs:ReceiveMessage"
+        ],
+        Resource = aws_sqs_queue.karpenter_interruption_queue.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "karpenter_sqs_policy_attachment" {
+  role       = aws_iam_role.karpenter_controller_role.name
+  policy_arn = aws_iam_policy.karpenter_sqs_access_policy.arn
+}
+
+# -------------------------
+# 1. VPC
+# -------------------------
+resource "aws_vpc" "eks_vpc" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = {
+    Name = "eks-vpc"
+  }
+}
+
+
+# -------------------------
+# 2. Internet Gateway
+# -------------------------
+resource "aws_internet_gateway" "eks_igw" {
+  vpc_id = aws_vpc.eks_vpc.id
+
+  tags = {
+    Name = "eks-igw"
+  }
+}
+
+# -------------------------
+# 3. Public & Private Subnets (x3 AZs)
+# -------------------------
+locals {
+  azs             = slice(data.aws_availability_zones.available.names, 0, 3)
+  public_subnets  = [for i in range(3) : cidrsubnet("10.0.0.0/16", 8, i)]
+  private_subnets = [for i in range(3) : cidrsubnet("10.0.0.0/16", 8, i + 10)]
+}
+
+resource "aws_subnet" "public" {
+  count                   = 3
+  vpc_id                 = aws_vpc.eks_vpc.id
+  cidr_block             = local.public_subnets[count.index]
+  availability_zone      = local.azs[count.index]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name                               = "eks-public-${local.azs[count.index]}"
+    "kubernetes.io/role/elb"           = "1"
+    "kubernetes.io/cluster/eks-cluster" = "owned"
+    "karpenter.sh/discovery"            = var.cluster_name
+    "kubernetes.io/cluster/cluster-lab-3" = "owned"
+    "kubernetes.io/role/elb" = "1"
+    "alb.ingress.kubernetes.io/group.name" = "devops-group"
+  }
+}
+
+resource "aws_subnet" "private" {
+  count              = 3
+  vpc_id             = aws_vpc.eks_vpc.id
+  cidr_block         = local.private_subnets[count.index]
+  availability_zone  = local.azs[count.index]
+
+  tags = {
+    Name                                    = "eks-private-${local.azs[count.index]}"
+    "kubernetes.io/role/internal-elb"       = "1"
+    "kubernetes.io/cluster/eks-cluster"     = "owned"
+    "karpenter.sh/discovery"            = var.cluster_name
+    "kubernetes.io/cluster/cluster-lab-3" = "owned"
+    "kubernetes.io/role/internal-elb" = "1"
+  }
+}
+
+# -------------------------
+# 4. NAT Gateways (1 per AZ)
+# -------------------------
+resource "aws_eip" "nat" {
+  count = 3
+  vpc   = true
+}
+
+resource "aws_nat_gateway" "nat" {
+  count         = 3
+  allocation_id = aws_eip.nat[count.index].id
+  subnet_id     = aws_subnet.public[count.index].id
+
+  tags = {
+    Name = "eks-nat-${local.azs[count.index]}"
+  }
+  depends_on = [aws_internet_gateway.eks_igw]
+}
+
+# -------------------------
+# 5. Route Tables
+# -------------------------
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.eks_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.eks_igw.id
+  }
+
+  tags = {
+    Name = "eks-public-rt"
+  }
+}
+
+resource "aws_route_table" "private" {
+  count  = 3
+  vpc_id = aws_vpc.eks_vpc.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat[count.index].id
+  }
+
+  tags = {
+    Name = "eks-private-rt-${local.azs[count.index]}"
+  }
+}
+
+# Associate subnets with route tables
+resource "aws_route_table_association" "public" {
+  count          = 3
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table_association" "private" {
+  count          = 3
+  subnet_id      = aws_subnet.private[count.index].id
+  route_table_id = aws_route_table.private[count.index].id
+}
+
 ## comment out cuz deploying a new cluster
 # resource "aws_s3_bucket" "terraform_state" {
 #   bucket = var.terraform_s3_bucket_name
