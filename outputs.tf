@@ -38,28 +38,38 @@ output "karpenter_nodes_role_arn" {
   value = aws_iam_role.karpenter_nodes_role.arn
 }
 
-output "eks_vpc_id" {
-  description = "The ID of the VPC"
-  value       = aws_vpc.eks_vpc.id
-}
+# output "eks_vpc_id" {
+#   description = "The ID of the VPC"
+#   value       = aws_vpc.eks_vpc1.id
+# }
 
-output "eks_private_subnet_ids" {
-  description = "List of private subnet IDs with their AZs"
-  value = [
-    for subnet in aws_subnet.private : {
-      id = subnet.id
-      az = subnet.availability_zone
-    }
-  ]
-}
+# output "eks_private_subnet_ids" {
+#   description = "List of private subnet IDs with their AZs"
+#   value = [
+#     for subnet in aws_subnet.eks_subnet_private1 : {
+#       id = subnet.id
+#       az = subnet.availability_zone
+#     }
+#   ]
+# }
 
-output "eks_public_subnet_ids" {
-  description = "List of private subnet IDs with their AZs"
-  value = [
-    for subnet in aws_subnet.public : {
-      id = subnet.id
-      az = subnet.availability_zone
-    }
-  ]
-}
+# output "eks_public_subnet_ids" {
+#   description = "List of private subnet IDs with their AZs"
+#   value = [
+#     for subnet in aws_subnet.eks_subnet_public1 : {
+#       id = subnet.id
+#       az = subnet.availability_zone
+#     }
+#   ]
+# }
+
+# output "eks_cluster_sg_id" {
+#   description = "The ID of the cluster sg"
+#   value       = aws_security_group.eks_cluster_sg.id
+# }
+
+# output "eks_node_sg_id" {
+#   description = "The ID of the ndes sg"
+#   value       = aws_security_group.eks_node_sg.id
+# }
 

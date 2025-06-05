@@ -28,8 +28,8 @@ data "aws_iam_policy_document" "assume_role_policy_oidc_provider" {
         "system:serviceaccount:kube-system:cluster-autoscaler-aws-cluster-autoscaler",
         "system:serviceaccount:kube-system:ebs-csi-controller-sa",
         "system:serviceaccount:ingress-nginx:nginx-ingress-ingress-nginx",
-        "system:serviceaccount:kube-system:aws-load-balancer-controller-sa",
-        "system:serviceaccount:external-secrets:external-secrets-aws-sa",
+        "system:serviceaccount:kube-system:awsalb-load-balancer-controller-sa",
+        "system:serviceaccount:external-secrets:external-secrets-awssm-sa",
         "system:serviceaccount:kube-system:karpenter"
       ]
     }
@@ -56,5 +56,20 @@ data "aws_iam_policy_document" "ebs_csi_driver_doc" {
       "ec2:DeleteVolume"
     ]
     resources = ["*"]
+  }
+}
+
+data "aws_iam_policy_document" "sns_topic_policy" {
+  statement {
+    sid    = "AllowCloudWatch"
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com"]
+    }
+
+    actions   = ["SNS:Publish"]
+    resources = [aws_sns_topic.karpenter_health_alerts.arn]
   }
 }

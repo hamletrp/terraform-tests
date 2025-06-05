@@ -442,7 +442,7 @@ resource "aws_iam_role_policy_attachment" "attach_lb_controller_policy" {
 }
 
 resource "aws_iam_role" "eso_irsa_role" {
-  name               = "eso-irsa-role-${var.cluster_name}"
+  name               = "eso-awssm-irsa-role-${var.cluster_name}"
   assume_role_policy = data.aws_iam_policy_document.assume_role_policy_oidc_provider.json
 }
 
@@ -504,6 +504,144 @@ resource "aws_sqs_queue" "karpenter_interruption_queue" {
   }
 }
 
+resource "aws_sns_topic" "karpenter_health_alerts" {
+  name = "KarpenterHealthAlertsTopic"
+}
+
+resource "aws_sns_topic_policy" "allow_cloudwatch_publish" {
+  arn    = aws_sns_topic.karpenter_health_alerts.arn
+  policy = data.aws_iam_policy_document.sns_topic_policy.json
+}
+resource "aws_sns_topic_subscription" "email_subscription" {
+  topic_arn = aws_sns_topic.karpenter_health_alerts.arn
+  protocol  = "email"
+  endpoint  = "hamletrp@gmail.com"
+}
+
+resource "aws_sns_topic_subscription" "sms_subscription" {
+  topic_arn = aws_sns_topic.karpenter_health_alerts.arn
+  protocol  = "sms"
+  endpoint  = "16315605543"
+}
+
+resource "aws_cloudwatch_metric_alarm" "interruption_queue_alarm" {
+  alarm_name          = "KarpenterInterruptionQueueDepth"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 1
+
+  dimensions = {
+    QueueName = aws_sqs_queue.karpenter_interruption_queue.name
+  }
+
+  alarm_description = "Triggered when more than 1 interruption messages are in the queue"
+  treat_missing_data = "notBreaching"
+
+   alarm_actions = [aws_sns_topic.karpenter_health_alerts.arn]
+  
+}
+
+resource "aws_sqs_queue_policy" "karpenter_interruption_queue_policy" {
+  queue_url = aws_sqs_queue.karpenter_interruption_queue.id
+
+  policy = jsonencode({
+    Id = "EC2InterruptionPolicy"
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = [
+            "events.amazonaws.com",
+            "sqs.amazonaws.com"
+          ]
+        }
+        Action = "sqs:SendMessage"
+        Resource = aws_sqs_queue.karpenter_interruption_queue.arn
+      },
+      {
+        Sid = "DenyHTTP"
+        Effect = "Deny"
+        Principal = "*"
+        Action = "sqs:*"
+        Resource = aws_sqs_queue.karpenter_interruption_queue.arn
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_cloudwatch_event_rule" "scheduled_change_rule" {
+  name        = "scheduled-change-rule"
+  description = "Triggers on AWS Health Events"
+  event_pattern = jsonencode({
+    source      = ["aws.health"]
+    "detail-type" = ["AWS Health Event"]
+  })
+}
+
+resource "aws_cloudwatch_event_target" "scheduled_change_target" {
+  rule      = aws_cloudwatch_event_rule.scheduled_change_rule.name
+  target_id = "KarpenterInterruptionQueueTarget"
+  arn       = aws_sqs_queue.karpenter_interruption_queue.arn
+}
+
+resource "aws_cloudwatch_event_rule" "spot_interruption_rule" {
+  name        = "SpotInterruptionRule"
+  description = "Triggers on EC2 Spot Instance Interruption Warnings"
+  event_pattern = jsonencode({
+    "source": ["aws.ec2"],
+    "detail-type": ["EC2 Spot Instance Interruption Warning"]
+  })
+}
+
+resource "aws_cloudwatch_event_target" "karpenter_interruption_target" {
+  rule      = aws_cloudwatch_event_rule.spot_interruption_rule.name
+  target_id = "KarpenterInterruptionQueueTarget"
+  arn       = aws_sqs_queue.karpenter_interruption_queue.arn
+}
+
+
+resource "aws_cloudwatch_event_rule" "rebalance_rule" {
+  name        = "RebalanceRule"
+  description = "Triggers on EC2 Instance Rebalance Recommendation"
+  event_pattern = jsonencode({
+    "source"      : ["aws.ec2"],
+    "detail-type": ["EC2 Instance Rebalance Recommendation"]
+  })
+}
+
+resource "aws_cloudwatch_event_target" "rebalance_target" {
+  rule      = aws_cloudwatch_event_rule.rebalance_rule.name
+  target_id = "KarpenterInterruptionQueueTarget"
+  arn       = aws_sqs_queue.karpenter_interruption_queue.arn
+}
+
+resource "aws_cloudwatch_event_rule" "instance_state_change_rule" {
+  name        = "instance-state-change-rule"
+  description = "Triggers on EC2 instance state change events"
+  event_pattern = jsonencode({
+    "source": ["aws.ec2"],
+    "detail-type": ["EC2 Instance State-change Notification"]
+  })
+}
+
+resource "aws_cloudwatch_event_target" "karpenter_interruption_queue_target" {
+  rule      = aws_cloudwatch_event_rule.instance_state_change_rule.name
+  target_id = "KarpenterInterruptionQueueTarget"
+  arn       = aws_sqs_queue.karpenter_interruption_queue.arn
+}
+
+
+
 resource "aws_iam_policy" "karpenter_sqs_access_policy" {
   name        = "karpenter_sqs_access_policy-${var.cluster_name}"
   description = "Policy karpenter interrumption queue"
@@ -533,132 +671,202 @@ resource "aws_iam_role_policy_attachment" "karpenter_sqs_policy_attachment" {
 # -------------------------
 # 1. VPC
 # -------------------------
-resource "aws_vpc" "eks_vpc" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_support   = true
-  enable_dns_hostnames = true
+# resource "aws_vpc" "eks_vpc1" {
+#   cidr_block           = "10.0.0.0/16"
+#   enable_dns_support   = true
+#   enable_dns_hostnames = true
 
-  tags = {
-    Name = "eks-vpc"
-  }
-}
+#   tags = {
+#     Name = "eks-vpc-${var.cluster_name}"
+#   }
+# }
+
+# # resource "aws_vpc_dhcp_options" "custom_dhcp" {
+# #   domain_name          = "ec2.internal"
+# #   domain_name_servers  = ["AmazonProvidedDNS"]
+# #   ntp_servers          = ["169.254.169.123"]
+# #   netbios_name_servers = ["10.0.0.1"]
+# #   netbios_node_type    = 2
+
+# #   tags = {
+# #     Name = "custom-dhcp-options-${var.cluster_name}"
+# #   }
+# # }
+
+# # resource "aws_vpc_dhcp_options_association" "dhcp_association" {
+# #   vpc_id          = aws_vpc.eks_vpc1.id
+# #   dhcp_options_id = aws_vpc_dhcp_options.custom_dhcp.id
+# # }
 
 
-# -------------------------
-# 2. Internet Gateway
-# -------------------------
-resource "aws_internet_gateway" "eks_igw" {
-  vpc_id = aws_vpc.eks_vpc.id
+# # -------------------------
+# # 2. Internet Gateway
+# # -------------------------
+# resource "aws_internet_gateway" "eks_igw1" {
+#   vpc_id = aws_vpc.eks_vpc1.id
 
-  tags = {
-    Name = "eks-igw"
-  }
-}
+#   tags = {
+#     Name = "eks-igw-${var.cluster_name}"
+#   }
+# }
 
-# -------------------------
-# 3. Public & Private Subnets (x3 AZs)
-# -------------------------
-locals {
-  azs             = slice(data.aws_availability_zones.available.names, 0, 3)
-  public_subnets  = [for i in range(3) : cidrsubnet("10.0.0.0/16", 8, i)]
-  private_subnets = [for i in range(3) : cidrsubnet("10.0.0.0/16", 8, i + 10)]
-}
+# # -------------------------
+# # 3. Public & Private Subnets (x3 AZs)
+# # -------------------------
+# locals {
+#   azs             = slice(data.aws_availability_zones.available.names, 0, 3)
+#   public_subnets  = [for i in range(3) : cidrsubnet("10.0.0.0/16", 8, i)]
+#   private_subnets = [for i in range(3) : cidrsubnet("10.0.0.0/16", 8, i + 10)]
+# }
 
-resource "aws_subnet" "public" {
-  count                   = 3
-  vpc_id                 = aws_vpc.eks_vpc.id
-  cidr_block             = local.public_subnets[count.index]
-  availability_zone      = local.azs[count.index]
-  map_public_ip_on_launch = true
+# resource "aws_subnet" "eks_subnet_public1" {
+#   count                   = 3
+#   vpc_id                 = aws_vpc.eks_vpc1.id
+#   cidr_block             = local.public_subnets[count.index]
+#   availability_zone      = local.azs[count.index]
+#   map_public_ip_on_launch = true
 
-  tags = {
-    Name                               = "eks-public-${local.azs[count.index]}"
-    "kubernetes.io/role/elb"           = "1"
-    "kubernetes.io/cluster/eks-cluster" = "owned"
-    "karpenter.sh/discovery"            = var.cluster_name
-    "kubernetes.io/cluster/cluster-lab-3" = "owned"
-    "kubernetes.io/role/elb" = "1"
-    "alb.ingress.kubernetes.io/group.name" = "devops-group"
-  }
-}
+#   tags = {
+#     Name                               = "eks-subnet-public1-${var.cluster_name}-${local.azs[count.index]}"
+#     "kubernetes.io/role/elb"           = "1"
+#     "kubernetes.io/cluster/eks-cluster" = "owned"
+#     "karpenter.sh/discovery"            = var.cluster_name
+#     "kubernetes.io/cluster/cluster-lab-1" = "owned"
+#     "kubernetes.io/role/elb" = "1"
+#     "alb.ingress.kubernetes.io/group.name" = "devops-group"
+#   }
+# }
 
-resource "aws_subnet" "private" {
-  count              = 3
-  vpc_id             = aws_vpc.eks_vpc.id
-  cidr_block         = local.private_subnets[count.index]
-  availability_zone  = local.azs[count.index]
+# resource "aws_subnet" "eks_subnet_private1" {
+#   count              = 3
+#   vpc_id             = aws_vpc.eks_vpc1.id
+#   cidr_block         = local.private_subnets[count.index]
+#   availability_zone  = local.azs[count.index]
 
-  tags = {
-    Name                                    = "eks-private-${local.azs[count.index]}"
-    "kubernetes.io/role/internal-elb"       = "1"
-    "kubernetes.io/cluster/eks-cluster"     = "owned"
-    "karpenter.sh/discovery"            = var.cluster_name
-    "kubernetes.io/cluster/cluster-lab-3" = "owned"
-    "kubernetes.io/role/internal-elb" = "1"
-  }
-}
+#   tags = {
+#     Name                                    = "eks-subnet-private1-${var.cluster_name}-${local.azs[count.index]}"
+#     "kubernetes.io/role/internal-elb"       = "1"
+#     "kubernetes.io/cluster/eks-cluster"     = "owned"
+#     "karpenter.sh/discovery"            = var.cluster_name
+#     "kubernetes.io/cluster/cluster-lab-1" = "owned"
+#     "kubernetes.io/role/internal-elb" = "1"
+#   }
+# }
 
-# -------------------------
-# 4. NAT Gateways (1 per AZ)
-# -------------------------
-resource "aws_eip" "nat" {
-  count = 3
-  vpc   = true
-}
+# # -------------------------
+# # 4. NAT Gateways (1 per AZ)
+# # -------------------------
+# resource "aws_eip" "eks_nat_1" {
+#   count = 3
+#   tags = {
+#     Name = "eks-eip-${var.cluster_name}"
+#   }
+# }
 
-resource "aws_nat_gateway" "nat" {
-  count         = 3
-  allocation_id = aws_eip.nat[count.index].id
-  subnet_id     = aws_subnet.public[count.index].id
+# resource "aws_nat_gateway" "eks_natgtw1" {
+#   count         = 3
+#   allocation_id = aws_eip.eks_nat_1[count.index].id
+#   subnet_id     = aws_subnet.eks_subnet_public1[count.index].id
 
-  tags = {
-    Name = "eks-nat-${local.azs[count.index]}"
-  }
-  depends_on = [aws_internet_gateway.eks_igw]
-}
+#   tags = {
+#     Name = "eks-natgtw1-${var.cluster_name}-${local.azs[count.index]}"
+#   }
+#   depends_on = [aws_internet_gateway.eks_igw1]
+# }
 
-# -------------------------
-# 5. Route Tables
-# -------------------------
-resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.eks_vpc.id
+# # -------------------------
+# # 5. Route Tables
+# # -------------------------
+# resource "aws_route_table" "eks_route_table_public1" {
+#   vpc_id = aws_vpc.eks_vpc1.id
 
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.eks_igw.id
-  }
+#   route {
+#     cidr_block = "0.0.0.0/0"
+#     gateway_id = aws_internet_gateway.eks_igw1.id
+#   }
 
-  tags = {
-    Name = "eks-public-rt"
-  }
-}
+#   tags = {
+#     Name = "eks-route-table-public1-${var.cluster_name}"
+#   }
+# }
 
-resource "aws_route_table" "private" {
-  count  = 3
-  vpc_id = aws_vpc.eks_vpc.id
+# resource "aws_route_table" "eks_route_table_private1" {
+#   count  = 3
+#   vpc_id = aws_vpc.eks_vpc1.id
 
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.nat[count.index].id
-  }
+#   route {
+#     cidr_block     = "0.0.0.0/0"
+#     nat_gateway_id = aws_nat_gateway.eks_natgtw1[count.index].id
+#   }
 
-  tags = {
-    Name = "eks-private-rt-${local.azs[count.index]}"
-  }
-}
+#   tags = {
+#     Name = "eks-route-table-private1-${var.cluster_name}-${local.azs[count.index]}"
+#   }
+# }
 
-# Associate subnets with route tables
-resource "aws_route_table_association" "public" {
-  count          = 3
-  subnet_id      = aws_subnet.public[count.index].id
-  route_table_id = aws_route_table.public.id
-}
+# # Associate subnets with route tables
+# resource "aws_route_table_association" "eks_aws_route_table_associationpublic1" {
+#   count          = 3
+#   subnet_id      = aws_subnet.eks_subnet_public1[count.index].id
+#   route_table_id = aws_route_table.eks_route_table_public1.id
+# }
 
-resource "aws_route_table_association" "private" {
-  count          = 3
-  subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = aws_route_table.private[count.index].id
-}
+# resource "aws_route_table_association" "aws_route_table_association_private1" {
+#   count          = 3
+#   subnet_id      = aws_subnet.eks_subnet_private1[count.index].id
+#   route_table_id = aws_route_table.eks_route_table_private1[count.index].id
+# }
+
+# resource "aws_security_group" "eks_cluster_sg" {
+#   name        = "eks-cluster-sg-${var.cluster_name}"
+#   description = "EKS Cluster Security Group"
+#   vpc_id      = aws_vpc.eks_vpc1.id
+
+#   tags = {
+#     Name                                     = "eks-cluster-sg-${var.cluster_name}"
+#     Environment                              = var.environment
+#     "kubernetes.io/cluster/my-eks-cluster"   = "owned"
+#     "karpenter.sh/discovery"                 = var.cluster_name
+#   }
+# }
+
+# resource "aws_security_group" "eks_node_sg" {
+#   name        = "eks-node-sg-${var.cluster_name}"
+#   description = "EKS Node Security Group"
+#   vpc_id      = aws_vpc.eks_vpc1.id
+
+#   # Allow worker nodes to communicate with each other
+#   ingress {
+#     from_port   = 0
+#     to_port     = 0
+#     protocol    = "-1"
+#     self        = true
+#   }
+
+#   # Allow nodes to receive traffic from cluster control plane
+#   ingress {
+#     description     = "Allow from EKS control plane"
+#     from_port       = 443
+#     to_port         = 443
+#     protocol        = "tcp"
+#     security_groups = [aws_security_group.eks_cluster_sg.id]
+#   }
+
+#   # Allow all outbound
+#   egress {
+#     from_port   = 0
+#     to_port     = 0
+#     protocol    = "-1"
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
+
+#   tags = {
+#     Name                                     = "eks-node-sg-${var.cluster_name}"
+#     Environment                              = "prod"
+#     "kubernetes.io/cluster/my-eks-cluster"   = "owned"
+#     "karpenter.sh/discovery"                 = var.cluster_name
+#   }
+# }
 
 ## comment out cuz deploying a new cluster
 # resource "aws_s3_bucket" "terraform_state" {
