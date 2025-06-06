@@ -139,6 +139,11 @@ resource "aws_iam_role" "eks_alb_controller_irsa_role" {
   assume_role_policy = data.aws_iam_policy_document.assume_role_policy_oidc_provider.json
 }
 
+resource "aws_iam_role" "gcloud_secret_irsa_role" {
+  name               = "gcloud-secret-irsa-role-${var.cluster_name}"
+  assume_role_policy = data.aws_iam_policy_document.assume_role_policy_oidc_provider.json
+}
+
 resource "aws_iam_policy" "alb_controller_policy" {
   name = "AWSLoadBalancerControllerIAMPolicy-${var.cluster_name}"
   policy = jsonencode({

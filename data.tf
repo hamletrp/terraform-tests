@@ -30,7 +30,8 @@ data "aws_iam_policy_document" "assume_role_policy_oidc_provider" {
         "system:serviceaccount:ingress-nginx:nginx-ingress-ingress-nginx",
         "system:serviceaccount:kube-system:awsalb-load-balancer-controller-sa",
         "system:serviceaccount:external-secrets:external-secrets-awssm-sa",
-        "system:serviceaccount:kube-system:karpenter"
+        "system:serviceaccount:karpenter:karpenter",
+        "system:serviceaccount:loki:gcloud-secrete-sa"
       ]
     }
   }

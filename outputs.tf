@@ -38,6 +38,11 @@ output "karpenter_nodes_role_arn" {
   value = aws_iam_role.karpenter_nodes_role.arn
 }
 
+output "gcloud_secret_irsa_role_arn" {
+  value = aws_iam_role.gcloud_secret_irsa_role.arn
+}
+
+
 # output "eks_vpc_id" {
 #   description = "The ID of the VPC"
 #   value       = aws_vpc.eks_vpc1.id
