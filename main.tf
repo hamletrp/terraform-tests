@@ -121,18 +121,24 @@ resource "aws_iam_role" "ebs_csi_driver_role" {
   }
 }
 
-# IAM Policy for EBS CSI Driver
-resource "aws_iam_policy" "ebs_csi_driver_policy" {
-  name        = "AmazonEKS_EBS_CSI_Driver_Policy-${var.cluster_name}"
-  description = "Custom policy for EBS CSI driver using IRSA"
-  policy      = data.aws_iam_policy_document.ebs_csi_driver_doc.json
+resource "aws_iam_role_policy" "ebs_csi__inline_policy" {
+  name = "ebs-csi-driver-role-policy-${var.cluster_name}"
+  role = aws_iam_role.ebs_csi_driver_role.name
+  policy = file("ebs-csi-driver-role-policy.json")
 }
 
+# IAM Policy for EBS CSI Driver
+# resource "aws_iam_policy" "ebs_csi_driver_policy" {
+#   name        = "AmazonEKS_EBS_CSI_Driver_Policy-${var.cluster_name}"
+#   description = "Custom policy for EBS CSI driver using IRSA"
+#   policy      = data.aws_iam_policy_document.ebs_csi_driver_doc.json
+# }
+
 # Attach policy to role
-resource "aws_iam_role_policy_attachment" "ebs_csi_attach" {
-  role       = aws_iam_role.ebs_csi_driver_role.name
-  policy_arn = aws_iam_policy.ebs_csi_driver_policy.arn
-}
+# resource "aws_iam_role_policy_attachment" "ebs_csi_attach" {
+#   role       = aws_iam_role.ebs_csi_driver_role.name
+#   policy_arn = aws_iam_policy.ebs_csi_driver_policy.arn
+# }
 
 resource "aws_iam_role" "eks_alb_controller_irsa_role" {
   name               = "eks-alb-controller-role-${var.cluster_name}"
@@ -736,7 +742,7 @@ resource "aws_iam_role_policy_attachment" "karpenter_sqs_policy_attachment" {
 #     "kubernetes.io/role/elb"           = "1"
 #     "kubernetes.io/cluster/eks-cluster" = "owned"
 #     "karpenter.sh/discovery"            = var.cluster_name
-#     "kubernetes.io/cluster/cluster-lab-1" = "owned"
+#     "kubernetes.io/cluster/cluster-lab-2" = "owned"
 #     "kubernetes.io/role/elb" = "1"
 #     "alb.ingress.kubernetes.io/group.name" = "devops-group"
 #   }
@@ -753,7 +759,7 @@ resource "aws_iam_role_policy_attachment" "karpenter_sqs_policy_attachment" {
 #     "kubernetes.io/role/internal-elb"       = "1"
 #     "kubernetes.io/cluster/eks-cluster"     = "owned"
 #     "karpenter.sh/discovery"            = var.cluster_name
-#     "kubernetes.io/cluster/cluster-lab-1" = "owned"
+#     "kubernetes.io/cluster/cluster-lab-2" = "owned"
 #     "kubernetes.io/role/internal-elb" = "1"
 #   }
 # }
