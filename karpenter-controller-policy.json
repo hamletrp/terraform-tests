@@ -41,7 +41,7 @@
       "Resource": "*",
       "Condition": {
         "StringEquals": {
-          "ec2:ResourceTag/karpenter.sh/discovery": "cluster-lab-2"
+          "ec2:ResourceTag/karpenter.sh/discovery": "cluster-lab-10"
         }
       }
     },
@@ -60,6 +60,16 @@
         "iam:CreateInstanceProfile"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "AllowScopedInstanceProfileActions",
+      "Effect": "Allow",
+      "Resource": "arn:aws:iam::722249351142:instance-profile/*",
+      "Action": [
+        "iam:AddRoleToInstanceProfile",
+        "iam:RemoveRoleFromInstanceProfile",
+        "iam:DeleteInstanceProfile"
+      ]
     },
     {
       "Sid": "AllowIamTagInstanceProfile",
@@ -99,7 +109,7 @@
       "Action": [
         "iam:PassRole"
       ],
-      "Resource": "arn:aws:iam::722249351142:role/eksctl-cluster-lab-2-nodegroup-linu-NodeInstanceRole"
+      "Resource": "arn:aws:iam::722249351142:role/eksctl-cluster-lab-10-nodegroup-linu-NodeInstanceRole"
     },
     {
       "Sid": "someuniqueid85738",
