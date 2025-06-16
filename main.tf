@@ -776,7 +776,7 @@ resource "aws_iam_role_policy_attachment" "karpenter_sqs_policy_attachment" {
 #     "kubernetes.io/role/elb"           = "1"
 #     "kubernetes.io/cluster/eks-cluster" = "owned"
 #     "karpenter.sh/discovery"            = var.cluster_name
-#     "kubernetes.io/cluster/cluster-lab-13" = "owned"
+#     "kubernetes.io/cluster/cluster-lab-14" = "owned"
 #     "kubernetes.io/role/elb" = "1"
 #     "alb.ingress.kubernetes.io/group.name" = "devops-group"
 #   }
@@ -793,7 +793,7 @@ resource "aws_iam_role_policy_attachment" "karpenter_sqs_policy_attachment" {
 #     "kubernetes.io/role/internal-elb"       = "1"
 #     "kubernetes.io/cluster/eks-cluster"     = "owned"
 #     "karpenter.sh/discovery"            = var.cluster_name
-#     "kubernetes.io/cluster/cluster-lab-13" = "owned"
+#     "kubernetes.io/cluster/cluster-lab-14" = "owned"
 #     "kubernetes.io/role/internal-elb" = "1"
 #   }
 # }
