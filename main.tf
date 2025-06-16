@@ -8,6 +8,40 @@ resource "aws_iam_role" "cluster_autoscaler_role" {
   assume_role_policy = data.aws_iam_policy_document.assume_role_policy_oidc_provider.json
 }
 
+resource "aws_iam_role" "cert_mnger_dns_solver_iam_role" {
+  name               = "cert-mnger-dns-solver-iam-role-${var.cluster_name}"
+  assume_role_policy = data.aws_iam_policy_document.assume_role_policy_oidc_provider.json
+}
+
+resource "aws_iam_role_policy" "cert_mnger_dns_solver_iam_role_inline_policy" {
+  name = "cert-mnger-dns-solver-iam-role-policy-${var.cluster_name}"
+  role = aws_iam_role.cert_mnger_dns_solver_iam_role.name
+  policy = file("cert-mnger-dns-solver-route53-acm-policy.json")
+}
+
+resource "aws_iam_role" "istiod_iam_role" {
+  name               = "istiod-iam-role-${var.cluster_name}"
+  assume_role_policy = data.aws_iam_policy_document.assume_role_policy_oidc_provider.json
+}
+
+resource "aws_iam_role_policy" "istiod_iam_role_inline_policy" {
+  name = "istiod-iam-role-policy-${var.cluster_name}"
+  role = aws_iam_role.istiod_iam_role.name
+  policy = file("istiod-route53-acm-policy.json")
+}
+
+resource "aws_iam_role" "istiogateway_iam_role" {
+  name               = "istiogateway-iam-role-${var.cluster_name}"
+  assume_role_policy = data.aws_iam_policy_document.assume_role_policy_oidc_provider.json
+}
+
+resource "aws_iam_role_policy" "istiogateway_iam_role_inline_policy" {
+  name = "istiogateway-iam-role-policy-${var.cluster_name}"
+  role = aws_iam_role.istiogateway_iam_role.name
+  policy = file("istiogateway-route53-acm-policy.json")
+}
+
+
 resource "aws_iam_policy" "cluster_autoscaler_policy" {
   name        = "eks-cluster-autoscaler-policy-${var.cluster_name}"
   description = "Policy for EKS Cluster Autoscaler"
@@ -742,7 +776,7 @@ resource "aws_iam_role_policy_attachment" "karpenter_sqs_policy_attachment" {
 #     "kubernetes.io/role/elb"           = "1"
 #     "kubernetes.io/cluster/eks-cluster" = "owned"
 #     "karpenter.sh/discovery"            = var.cluster_name
-#     "kubernetes.io/cluster/cluster-lab-10" = "owned"
+#     "kubernetes.io/cluster/cluster-lab-13" = "owned"
 #     "kubernetes.io/role/elb" = "1"
 #     "alb.ingress.kubernetes.io/group.name" = "devops-group"
 #   }
@@ -759,7 +793,7 @@ resource "aws_iam_role_policy_attachment" "karpenter_sqs_policy_attachment" {
 #     "kubernetes.io/role/internal-elb"       = "1"
 #     "kubernetes.io/cluster/eks-cluster"     = "owned"
 #     "karpenter.sh/discovery"            = var.cluster_name
-#     "kubernetes.io/cluster/cluster-lab-10" = "owned"
+#     "kubernetes.io/cluster/cluster-lab-13" = "owned"
 #     "kubernetes.io/role/internal-elb" = "1"
 #   }
 # }
@@ -878,6 +912,28 @@ resource "aws_iam_role_policy_attachment" "karpenter_sqs_policy_attachment" {
 #     "karpenter.sh/discovery"                 = var.cluster_name
 #   }
 # }
+
+
+# # Root domain → A record Alias to NLB
+resource "aws_route53_record" "doordress_wildcard_cname" {
+  zone_id = var.test_site_zone_id
+  name    = "*.${var.test_site_domain_name}"
+  type    = "CNAME"
+  ttl     = 60
+  records = [var.istio_nlb_dns_name]
+}
+
+resource "aws_route53_record" "doordress_www_alias" {
+  zone_id = var.test_site_zone_id
+  name    = "www.${var.test_site_domain_name}"
+  type    = "A"
+
+  alias {
+    name                   = var.istio_nlb_dns_name
+    zone_id                = var.istio_nlb_dns_zone_id
+    evaluate_target_health = false
+  }
+}
 
 ## comment out cuz deploying a new cluster
 # resource "aws_s3_bucket" "terraform_state" {

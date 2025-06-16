@@ -41,7 +41,7 @@
       "Resource": "*",
       "Condition": {
         "StringEquals": {
-          "ec2:ResourceTag/karpenter.sh/discovery": "cluster-lab-10"
+          "ec2:ResourceTag/karpenter.sh/discovery": "cluster-lab-13"
         }
       }
     },
@@ -109,7 +109,7 @@
       "Action": [
         "iam:PassRole"
       ],
-      "Resource": "arn:aws:iam::722249351142:role/eksctl-cluster-lab-10-nodegroup-linu-NodeInstanceRole"
+      "Resource": "arn:aws:iam::722249351142:role/eksctl-cluster-lab-13-nodegroup-linu-NodeInstanceRole"
     },
     {
       "Sid": "someuniqueid85738",

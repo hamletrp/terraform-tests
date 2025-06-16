@@ -30,7 +30,10 @@ data "aws_iam_policy_document" "assume_role_policy_oidc_provider" {
         "system:serviceaccount:networking:awsalb-load-balancer-controller-sa",
         "system:serviceaccount:external-secrets:external-secrets-awssm-sa",
         "system:serviceaccount:karpenter:karpenter",
-        "system:serviceaccount:networking:nginx-ingress-sa"
+        "system:serviceaccount:networking:nginx-ingress-sa",
+        "system:serviceaccount:istio-system:istiod-appmesh-sa",
+        "system:serviceaccount:istio-system:istio-ingressgateway-sa",
+        "system:serviceaccount:cert-manager:cert-manager-sa"
       ]
     }
     condition {

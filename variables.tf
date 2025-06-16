@@ -50,4 +50,21 @@ variable "managed_node_group_name" {
   type    = string
 }
 
+variable "test_site_zone_id" {
+  type    = string
+  default = "Z09059223NU9ETJKGVT4I"  # Replace with your Hosted Zone ID
+}
+
+variable "test_site_domain_name" {
+  type    = string
+}
+
+variable "istio_nlb_dns_name" {
+  type    = string
+}
+
+variable "istio_nlb_dns_zone_id" {
+  type    = string
+}
+
 

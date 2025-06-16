@@ -22,6 +22,18 @@ output "aws_lb_controller_role_arn" {
   value = aws_iam_role.aws_lb_controller_role.arn
 }
 
+output "istiod_iam_role_arn" {
+  value = aws_iam_role.istiod_iam_role.arn
+}
+
+output "istiogateway_iam_role_arn" {
+  value = aws_iam_role.istiogateway_iam_role.arn
+}
+
+output "cert_mnger_dns_solver_iam_role_arn" {
+  value = aws_iam_role.cert_mnger_dns_solver_iam_role.arn
+}
+
 output "eso_irsa_role_arn" {
   value = aws_iam_role.eso_irsa_role.arn
 }
