@@ -67,4 +67,30 @@ variable "istio_nlb_dns_zone_id" {
   type    = string
 }
 
+variable "cluster_13_vpc_id" {
+  type    = string
+}
+
+variable "cluster_13_vpc_cidr" {
+  type    = string
+}
+
+variable "cluster_13_routetable_id" {
+  type    = string
+}
+
+variable "cluster_14_vpc_id" {
+  type    = string
+}
+
+variable "cluster_14_vpc_cidr" {
+  type    = string
+}
+
+
+variable "cluster_14_routetable_id" {
+  type    = string
+}
+
+
 

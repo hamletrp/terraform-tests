@@ -41,7 +41,7 @@
       "Resource": "*",
       "Condition": {
         "StringEquals": {
-          "ec2:ResourceTag/karpenter.sh/discovery": "cluster-lab-14"
+          "ec2:ResourceTag/karpenter.sh/discovery": "cluster-lab-13"
         }
       }
     },

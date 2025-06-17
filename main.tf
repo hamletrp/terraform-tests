@@ -776,7 +776,7 @@ resource "aws_iam_role_policy_attachment" "karpenter_sqs_policy_attachment" {
 #     "kubernetes.io/role/elb"           = "1"
 #     "kubernetes.io/cluster/eks-cluster" = "owned"
 #     "karpenter.sh/discovery"            = var.cluster_name
-#     "kubernetes.io/cluster/cluster-lab-14" = "owned"
+#     "kubernetes.io/cluster/cluster-lab-13" = "owned"
 #     "kubernetes.io/role/elb" = "1"
 #     "alb.ingress.kubernetes.io/group.name" = "devops-group"
 #   }
@@ -793,7 +793,7 @@ resource "aws_iam_role_policy_attachment" "karpenter_sqs_policy_attachment" {
 #     "kubernetes.io/role/internal-elb"       = "1"
 #     "kubernetes.io/cluster/eks-cluster"     = "owned"
 #     "karpenter.sh/discovery"            = var.cluster_name
-#     "kubernetes.io/cluster/cluster-lab-14" = "owned"
+#     "kubernetes.io/cluster/cluster-lab-13" = "owned"
 #     "kubernetes.io/role/internal-elb" = "1"
 #   }
 # }
@@ -934,6 +934,37 @@ resource "aws_route53_record" "doordress_www_alias" {
     evaluate_target_health = false
   }
 }
+
+# # Inputs for each VPC in respective providers "requester" and "accepter"
+# # aws ec2 delete-vpc-peering-connection --vpc-peering-connection-id pcx-029fa91bf6499bb77
+# resource "aws_vpc_peering_connection" "argocd_hub_spoke" {
+#   # provider = aws.requester
+#   vpc_id = var.cluster_13_vpc_id
+#   peer_vpc_id = var.cluster_14_vpc_id
+#   auto_accept = false
+#   tags = {
+#     Name = "argocd-hub-spoke"
+#   }
+# }
+
+# resource "aws_vpc_peering_connection_options" "peer_options_a" {
+#   vpc_peering_connection_id = aws_vpc_peering_connection.argocd_hub_spoke.id
+#   requester {
+#     allow_remote_vpc_dns_resolution = true
+#   }
+# }
+
+# resource "aws_route" "vpc_hub_to_spoke1" {
+#   route_table_id            = var.cluster_13_routetable_id
+#   destination_cidr_block    = var.cluster_14_vpc_cidr
+#   vpc_peering_connection_id = aws_vpc_peering_connection.argocd_hub_spoke.id
+# }
+
+# resource "aws_route" "vpc_b_to_a" {
+#   route_table_id            = var.cluster_14_routetable_id
+#   destination_cidr_block    = var.cluster_13_vpc_cidr
+#   vpc_peering_connection_id = aws_vpc_peering_connection.argocd_hub_spoke.id
+# }
 
 ## comment out cuz deploying a new cluster
 # resource "aws_s3_bucket" "terraform_state" {
