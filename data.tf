@@ -44,6 +44,27 @@ data "aws_iam_policy_document" "assume_role_policy_oidc_provider" {
   }
 }
 
+data "aws_iam_policy_document" "github_actions_role_policy_oidc_provider" {
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Federated"
+      identifiers = ["arn:aws:iam::${var.AWS_ACC_ID}:oidc-provider/token.actions.githubusercontent.com"]
+    }
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values = ["repo:eksk8s/tests:*"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values = ["sts.amazonaws.com"]
+    }
+  }
+}
+
 
 data "aws_iam_policy_document" "ebs_csi_driver_doc" {
   statement {

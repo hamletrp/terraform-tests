@@ -1,0 +1,79 @@
+stages:
+  - validate
+  - plan
+  - apply
+
+variables:
+  TF_VERSION: "1.5.0"
+  TF_IMAGE: hashicorp/terraform:${TF_VERSION}
+  TF_WORK_DIR: ""
+
+default:
+  image: $TF_IMAGE
+  before_script:
+    - terraform --version
+    - cd $TF_WORK_DIR
+
+.validate_template: &validate_template
+  stage: validate
+  script:
+    - terraform init -input=false
+    - terraform fmt -check
+    - terraform validate
+
+.plan_template: &plan_template
+  stage: plan
+  script:
+    - terraform init -input=false
+    - terraform plan -out=tfplan
+  artifacts:
+    paths:
+      - $TF_WORK_DIR/tfplan
+
+.apply_template: &apply_template
+  stage: apply
+  script:
+    - terraform apply -input=false -auto-approve tfplan
+
+validate:stage:
+  <<: *validate_template
+  variables:
+    TF_WORK_DIR: "stage"
+  only:
+    - merge_requests
+    - main
+
+plan:stage:
+  <<: *plan_template
+  variables:
+    TF_WORK_DIR: "stage"
+  only:
+    - main
+
+apply:stage:
+  <<: *apply_template
+  variables:
+    TF_WORK_DIR: "stage"
+  only:
+    - main
+
+validate:prod:
+  <<: *validate_template
+  variables:
+    TF_WORK_DIR: "prod"
+  only:
+    - tags
+
+plan:prod:
+  <<: *plan_template
+  variables:
+    TF_WORK_DIR: "prod"
+  only:
+    - tags
+
+apply:prod:
+  <<: *apply_template
+  variables:
+    TF_WORK_DIR: "prod"
+  only:
+    - tags

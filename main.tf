@@ -1,7 +1,3 @@
-provider "aws" {
-  profile = "default"
-  region  = "us-east-1"
-}
 
 resource "aws_iam_role" "cluster_autoscaler_role" {
   name               = "${var.eks_role_name}-${var.cluster_name}"
@@ -122,7 +118,7 @@ resource "aws_iam_policy" "eks_node_group_role_inline_policy" {
       {
         Effect = "Allow",
         Action = [
-          "ec2:CreateVolume",
+          # "ec2:CreateVolume",
           "ec2:AttachVolume",
           "ec2:DetachVolume",
           "ec2:DeleteVolume",
@@ -566,7 +562,7 @@ resource "aws_sns_topic_subscription" "email_subscription" {
 resource "aws_sns_topic_subscription" "sms_subscription" {
   topic_arn = aws_sns_topic.karpenter_health_alerts.arn
   protocol  = "sms"
-  endpoint  = "16315605543"
+  endpoint  = "+16315605543"
 }
 
 resource "aws_cloudwatch_metric_alarm" "interruption_queue_alarm" {
@@ -965,6 +961,160 @@ resource "aws_route53_record" "doordress_www_alias" {
 #   destination_cidr_block    = var.cluster_13_vpc_cidr
 #   vpc_peering_connection_id = aws_vpc_peering_connection.argocd_hub_spoke.id
 # }
+
+resource "helm_release" "aws_ebs_csi_driver" {
+  name       = "aws-ebs-csi-driver"
+  chart      = "aws-ebs-csi-driver"
+  repository = "https://kubernetes-sigs.github.io/aws-ebs-csi-driver"
+  namespace  = "kube-system"
+  version    = "2.45.1" 
+  
+  create_namespace = false
+
+  values = [
+    yamlencode({
+      controller = {
+        tolerations = [
+          {
+            key      = "workload-type"
+            operator = "Equal"
+            value    = "core"
+            effect   = "NoSchedule"
+          },
+          {
+            key      = "CriticalAddonsOnly"
+            operator = "Equal"
+            value    = "true"
+            effect   = "NoSchedule"
+          }
+        ]
+        serviceAccount = {
+          create = true
+          name   = "ebs-csi-controller-sa"
+          annotations = {
+            "eks.amazonaws.com/role-arn" = aws_iam_role.ebs_csi_driver_role.arn
+          }
+        }
+      }
+
+      node = {
+        tolerations = [
+          {
+            key      = "workload-type"
+            operator = "Equal"
+            value    = "core"
+            effect   = "NoSchedule"
+          },
+          {
+            key      = "CriticalAddonsOnly"
+            operator = "Equal"
+            value    = "true"
+            effect   = "NoSchedule"
+          }
+        ]
+      }
+    })
+  ]
+}
+
+resource "aws_iam_role" "github_actions_ecr_push_role" {
+  name               = "gihub-actions-ecr-push-${var.environment}"
+  assume_role_policy = data.aws_iam_policy_document.github_actions_role_policy_oidc_provider.json
+}
+
+resource "aws_iam_role_policy" "github_actions_ecr_push_role_inline_policy" {
+  name = "github-actions-ecr-push-role-policy-${var.cluster_name}"
+  role = aws_iam_role.github_actions_ecr_push_role.name
+  policy = file("guthub-actions-ecr-push-policy.json")
+}
+
+resource "aws_launch_template" "eks_overlay_optimized" {
+  name_prefix   = "eks-nodes-13-overlay-"
+  image_id      = var.eks_ami_id
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size = 30 # >= 100 Gib This volume is for the OS and kubelet — not for pods.
+      volume_type = var.eks_vol_type 
+      iops        = 3000
+      throughput  = 125
+      encrypted   = true
+    }
+  }
+
+  block_device_mappings {
+    device_name = "/dev/xvdb"
+    ebs {
+      volume_size = 10 # 200
+      volume_type = var.eks_vol_type 
+      # iops        = 3000 # for High churn of containers
+      encrypted   = true
+    }
+  }
+
+  user_data = base64encode(<<-EOT
+    #!/bin/bash
+    mkfs -t xfs /dev/xvdb
+    mkdir -p /var/lib/containerd
+    mount /dev/xvdb /var/lib/containerd
+    echo "/dev/xvdb /var/lib/containerd xfs defaults,nofail 0 2" >> /etc/fstab
+    /etc/eks/bootstrap.sh ${var.cluster_name}
+  EOT
+  )
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "eks-overlay-optimized-node"
+      "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+    }
+  }
+}
+
+
+# # 1. Dynamically look up the EKS Node Security Group created by eksctl
+# data "aws_security_group" "eks_node_sg" {
+#   filter {
+#     name   = "tag:aws:eks:cluster-name"
+#     values = [var.cluster_name] # <-- Put your exact cluster name here
+#   }
+  
+#   filter {
+#     name   = "tag:kubernetes.io/cluster/${var.cluster_name}"
+#     values = ["owned"]
+#   }
+# }
+
+# locals {
+#   # Define the array of security group IDs attached to your NLB
+#   nlb_security_groups = [
+#     "sg-0738226ac0e81dcf8",
+#     "sg-0977d7fbd1ecfec3b"
+#   ]
+# }
+
+# 2. Attach the rule to the dynamically retrieved security group ID
+
+# # Dynamically provision an entry rule for each NLB security group
+# resource "aws_vpc_security_group_ingress_rule" "allow_nlb_to_traefik" {
+#   for_each = toset(local.nlb_security_groups)
+
+#   # Target: Your EKS Node Security Group
+#   security_group_id = data.aws_security_group.eks_node_sg.id
+
+#   # Source: Iterates through each group ID in the set
+#   referenced_security_group_id = each.value
+
+#   # Port Mapping for Traefik Application Listener
+#   ip_protocol = "tcp"
+#   from_port   = 8000
+#   to_port     = 8000
+
+#   description = "Allow NLB SG ${each.value} to hit Traefik pods over port 8000"
+# }
+
+
 
 ## comment out cuz deploying a new cluster
 # resource "aws_s3_bucket" "terraform_state" {

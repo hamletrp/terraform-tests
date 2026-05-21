@@ -92,5 +92,13 @@ variable "cluster_14_routetable_id" {
   type    = string
 }
 
+variable "eks_ami_id" {
+  type    = string
+}
+
+variable "eks_vol_type" {
+  type    = string
+}
+
 
 
