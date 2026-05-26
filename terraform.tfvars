@@ -1,6 +1,6 @@
 cluster_name                = "cluster-lab-13"
-oidc_provider               = "oidc.eks.us-east-1.amazonaws.com/id/98B1F7FCD515BA9A5C81C999816C42C9"
-oidc_provider_url           = "https://oidc.eks.us-east-1.amazonaws.com/id/98B1F7FCD515BA9A5C81C999816C42C9"
+oidc_provider               = "oidc.eks.us-east-1.amazonaws.com/id/E07630625ED8968C1E39EC0173B7F883"
+oidc_provider_url           = "https://oidc.eks.us-east-1.amazonaws.com/id/E07630625ED8968C1E39EC0173B7F883"
 managed_node_group_name     = "linux-nodes-13"
 AWS_ACC_ID                  = "722249351142"
 test_site_zone_id           = "Z09059223NU9ETJKGVT4I"

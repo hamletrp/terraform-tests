@@ -114,8 +114,7 @@ resource "aws_iam_policy" "eks_node_group_role_inline_policy" {
 
   policy = jsonencode({
     Version = "2012-10-17",
-    Statement = [
-      {
+    Statement = [{
         Effect = "Allow",
         Action = [
           # "ec2:CreateVolume",
@@ -465,6 +464,104 @@ resource "aws_iam_role_policy_attachment" "eks_cni_policy_attach" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
 }
 
+resource "aws_iam_role" "ack_eks_controller_role" {
+  name               = "aws-eks-controller-role"
+  assume_role_policy = data.aws_iam_policy_document.pod_identity_association.json
+}
+
+resource "aws_eks_pod_identity_association" "ack_eks_controller_role_pod_identity_association" {
+  cluster_name    = var.cluster_name
+  namespace       = "platform-system"
+  service_account = "ack-eks-controller-sa"
+  role_arn        = aws_iam_role.ack_eks_controller_role.arn
+}
+
+resource "aws_iam_policy" "ack_eks_controller_role_iam_policy" {
+  name = "ACKEKSControllerRoleIamPolicy"
+  policy = jsonencode(
+    {
+      "Version" : "2012-10-17",
+      "Statement" : [{
+        Effect = "Allow",
+        Action = [
+          "eks:CreatePodIdentityAssociation",
+          "eks:TagResource",
+          "eks:DescribePodIdentityAssociation"
+        ],
+        Resource = ["arn:aws:eks:${var.AWS_REGION}:${var.AWS_ACC_ID}:cluster/${var.cluster_name}",
+        "arn:aws:eks:${var.AWS_REGION}:${var.AWS_ACC_ID}:podidentityassociation/${var.cluster_name}/*"]
+      },{
+        Effect = "Allow",
+        Action = [ "iam:PassRole", "iam:GetRole"],
+        Resource = [aws_iam_role.external_dns_role.arn]
+      }]
+    }
+  )
+}
+
+resource "aws_iam_role_policy_attachment" "ack_eks_controller_policy_attachement" {
+  role       = aws_iam_role.ack_eks_controller_role.name
+  policy_arn = aws_iam_policy.ack_eks_controller_role_iam_policy.arn
+}
+
+# Configures a clean, cloud-native trust handshake targeting the EKS principal
+data "aws_iam_policy_document" "external_dns_trust_policy" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole", "sts:TagSession"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["pods.eks.amazonaws.com"] # Pure EKS service trust mechanism
+    }
+  }
+}
+
+resource "aws_iam_role" "external_dns_role" {
+  name               = "ExternalDnsControllerRole-${var.cluster_name}"
+  assume_role_policy = data.aws_iam_policy_document.external_dns_trust_policy.json
+
+  tags = {
+    "eksctl.cluster.k8s.io/v1alpha1/cluster-name" = var.cluster_name
+    "eks.amazonaws.com/component"                 = "external-dns-controller"
+  }
+}
+
+# IAM policy to allow Route53 zone updates
+resource "aws_iam_policy" "external_dns_iam_policy" {
+  name = "ExternalDNSControllerIAMPolicy"
+  policy = jsonencode(
+    {
+      "Version" : "2012-10-17",
+      "Statement" : [
+        {
+          "Effect" : "Allow",
+          "Action" : [
+            "route53:ChangeResourceRecordSets"
+          ],
+          "Resource" : [
+            "arn:aws:route53:::hostedzone/*"
+          ]
+        },
+        {
+          "Effect" : "Allow",
+          "Action" : [
+            "route53:ListHostedZones",
+            "route53:ListResourceRecordSets"
+          ],
+          "Resource" : [
+            "*"
+          ]
+        }
+      ]
+    }
+  )
+}
+
+resource "aws_iam_role_policy_attachment" "externaldns_policy_attachement" {
+  role       = aws_iam_role.external_dns_role.name
+  policy_arn = aws_iam_policy.external_dns_iam_policy.arn
+}
 
 resource "aws_iam_role" "aws_lb_controller_role" {
   name               = "AmazonEKSLoadBalancerControllerRole-${var.cluster_name}"
@@ -494,7 +591,7 @@ resource "aws_iam_role_policy_attachment" "eso_irsa_policy_attach" {
 
 resource "aws_iam_role_policy_attachment" "eso_irsa_policy_attach_2" {
   role       = aws_iam_role.eso_irsa_role.name
-  policy_arn = "arn:aws:iam::722249351142:policy/SSMParamStore-FullRead" # or create custom policy with minimal access
+  policy_arn = "arn:aws:iam::${var.AWS_ACC_ID}:policy/SSMParamStore-FullRead" # or create custom policy with minimal access
 }
 
 resource "aws_iam_role" "karpenter_nodes_role" {
@@ -911,25 +1008,160 @@ resource "aws_iam_role_policy_attachment" "karpenter_sqs_policy_attachment" {
 
 
 # # Root domain → A record Alias to NLB
-resource "aws_route53_record" "doordress_wildcard_cname" {
-  zone_id = var.test_site_zone_id
-  name    = "*.${var.test_site_domain_name}"
-  type    = "CNAME"
-  ttl     = 60
-  records = [var.istio_nlb_dns_name]
-}
+# resource "aws_route53_record" "doordress_wildcard_cname" {
+#   zone_id = var.test_site_zone_id
+#   name    = "*.${var.test_site_domain_name}"
+#   type    = "CNAME"
+#   ttl     = 60
+#   records = [var.istio_nlb_dns_name]
+# }
 
-resource "aws_route53_record" "doordress_www_alias" {
-  zone_id = var.test_site_zone_id
-  name    = "www.${var.test_site_domain_name}"
-  type    = "A"
+# resource "aws_route53_record" "doordress_www_alias" {
+#   zone_id = var.test_site_zone_id
+#   name    = "www.${var.test_site_domain_name}"
+#   type    = "A"
 
-  alias {
-    name                   = var.istio_nlb_dns_name
-    zone_id                = var.istio_nlb_dns_zone_id
-    evaluate_target_health = false
-  }
-}
+#   alias {
+#     name                   = var.istio_nlb_dns_name
+#     zone_id                = var.istio_nlb_dns_zone_id
+#     evaluate_target_health = false
+#   }
+# }
+
+# resource "aws_iam_role" "ssm_role" {
+#   name = "minimal-ec2-ssm-role"
+
+#   assume_role_policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [{
+#       Action    = "sts:AssumeRole"
+#       Effect    = "Allow"
+#       Principal = { Service = "ec2.amazonaws.com" }
+#     }]
+#   })
+# }
+
+# # 2. Attach the Core SSM Managed Policy
+# resource "aws_iam_role_policy_attachment" "ssm_policy" {
+#   role       = aws_iam_role.ssm_role.name
+#   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+# }
+
+# # 3. Create the Instance Profile wrapper
+# resource "aws_iam_instance_profile" "ssm_profile" {
+#   name = "minimal-ec2-ssm-profile"
+#   role = aws_iam_role.ssm_role.name
+# }
+
+# resource "aws_security_group" "minimal_ec2_sg" {
+#   name        = "minimal-private-worker-sg"
+#   description = "Dedicated firewall for low-cost private compute node"
+#   vpc_id      = data.aws_subnet.target.vpc_id
+
+#   # Inbound Rule: Restrict SSH (Port 22) access to your specific public IP
+#   ingress {
+#     description = "Allow SSH from trusted administrator IP only"
+#     from_port   = 22
+#     to_port     = 22
+#     protocol    = "tcp"
+#     cidr_blocks = ["0.0.0.0/0"] # <-- Ideally, this should be restricted to the VPC CIDR or specific endpoint IPs for better security
+#   }
+
+#   # Inbound Rule: Required if using interface VPC Endpoints for SSM
+#   # ingress {
+#   #   description = "Allow local VPC interface communications for SSM"
+#   #   from_port   = 443
+#   #   to_port     = 443
+#   #   protocol    = "tcp"
+#   #   cidr_blocks = ["0.0.0.0/0"]
+#   # }
+
+#   tags = {
+#     Name = "minimal-private-worker-sg"
+#   }
+# }
+
+# # 3. Outbound Rule (Egress): Lock down or open outbound traffic
+# resource "aws_vpc_security_group_egress_rule" "allow_all_out" {
+#   security_group_id = aws_security_group.minimal_ec2_sg.id
+#   description       = "Provide stateful return path and outward dependency mapping"
+
+#   ip_protocol = "-1"          # Semantically represents "All Protocols"
+#   cidr_ipv4   = "0.0.0.0/0"    # Adjust to your cluster VPC boundary if enforcing tight egress
+# }
+
+# # Dynamically pull the latest light-weight Amazon Linux 2023 minimal image
+# data "aws_ami" "al2023_minimal" {
+#   most_recent = true
+#   owners      = ["amazon"]
+
+#   filter {
+#     name   = "name"
+#     values = ["al2023-ami-minimal-2023.*-x86_64"] # Minimal footprint AMI
+#   }
+# }
+
+# # Low-Cost Ephemeral Private Compute Node
+# resource "aws_instance" "lowest_cost_node" {
+#   ami           = data.aws_ami.al2023_minimal.id
+#   instance_type = "t3.nano" # Absolute lowest cost modern generation instance type (~$3.80/month)
+#   # iam_instance_profile = aws_iam_instance_profile.ssm_profile.name
+
+#   # ⚠️ SSM REQUIREMENT 2: Force start the SSM Agent (Required for Minimal AMIs)
+#   # user_data = <<-EOF
+#   #             #!/bin/bash
+#   #             systemctl enable amazon-ssm-agent
+#   #             systemctl start amazon-ssm-agent
+#   #             EOF
+
+#   # Network & Access bindings
+#   subnet_id              = data.aws_subnet.target.id
+#   vpc_security_group_ids = [aws_security_group.minimal_ec2_sg.id] # Attach both the cluster SG and the dedicated minimal worker SG
+#   key_name               = "ssh-ec2-eks-private-subnet"
+
+#   # Simplest minimal root block configuration required to boot the OS
+#   root_block_device {
+#     volume_type           = "gp3"
+#     volume_size           = 8     # Bare minimum required operational disk space
+#     delete_on_termination = true  # Ephemeral lifecycle behavior (wipes when instance drops)
+#   }
+
+#   tags = {
+#     Name = "minimal-private-worker"
+#   }
+# }
+
+# locals {
+#   # The four explicit AWS system endpoints required by the SSM agent loop
+#   ssm_services = ["ssm", "ssmmessages", "ec2messages"]
+# }
+
+# # Dynamically lookup your VPC ID from your existing subnet public bastion test
+# data "aws_subnet" "target" {
+#   id = "subnet-0dff6e397242123d2"
+# }
+
+# Provision the interface endpoints loops
+# resource "aws_vpc_endpoint" "ssm_endpoints" {
+#   for_each = toset(local.ssm_services)
+
+#   vpc_id            = data.aws_subnet.target.vpc_id
+#   service_name      = "com.amazonaws.${var.AWS_REGION}.${each.value}" # <-- Replace ${var.AWS_REGION} with your actual region
+#   vpc_endpoint_type = "Interface"
+
+#   # Bind it directly to your target private subnet
+#   subnet_ids          = ["subnet-0bf16d5d7ef29587f"]
+#   private_dns_enabled = true # Crucial: Maps standard SSM URLs to these private endpoints
+
+#   # Attach your EC2's security group so it can accept the inbound connection
+#   security_group_ids = ["sg-0794f4c81dda655ee", aws_security_group.minimal_ec2_sg.id]
+
+#   tags = {
+#     Name = "ssm-endpoint-${each.value}"
+#   }
+# }
+
+
 
 # # Inputs for each VPC in respective providers "requester" and "accepter"
 # # aws ec2 delete-vpc-peering-connection --vpc-peering-connection-id pcx-029fa91bf6499bb77

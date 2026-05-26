@@ -13,6 +13,20 @@ data "aws_iam_policy_document" "eks_assume_role_policy" {
 
 data "aws_availability_zones" "available" {}
 
+data "aws_iam_policy_document" "pod_identity_association" {
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["pods.eks.amazonaws.com"]
+    }
+    actions = [
+      "sts:AssumeRole",
+      "sts:TagSession"
+    ]
+  }
+}
+
 data "aws_iam_policy_document" "assume_role_policy_oidc_provider" {
   statement {
     effect = "Allow"
