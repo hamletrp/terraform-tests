@@ -486,7 +486,8 @@ resource "aws_iam_policy" "ack_eks_controller_role_iam_policy" {
         Action = [
           "eks:CreatePodIdentityAssociation",
           "eks:TagResource",
-          "eks:DescribePodIdentityAssociation"
+          "eks:DescribePodIdentityAssociation",
+          "eks:DeletePodIdentityAssociation"
         ],
         Resource = ["arn:aws:eks:${var.AWS_REGION}:${var.AWS_ACC_ID}:cluster/${var.cluster_name}",
         "arn:aws:eks:${var.AWS_REGION}:${var.AWS_ACC_ID}:podidentityassociation/${var.cluster_name}/*"]
@@ -504,22 +505,23 @@ resource "aws_iam_role_policy_attachment" "ack_eks_controller_policy_attachement
   policy_arn = aws_iam_policy.ack_eks_controller_role_iam_policy.arn
 }
 
-# Configures a clean, cloud-native trust handshake targeting the EKS principal
-data "aws_iam_policy_document" "external_dns_trust_policy" {
-  statement {
-    effect  = "Allow"
-    actions = ["sts:AssumeRole", "sts:TagSession"]
+resource "aws_iam_role" "ap_abc_cred_role" {
+  name               = "APABCCredRole-${var.cluster_name}"
+  assume_role_policy = data.aws_iam_policy_document.eks_pod_identity_trust_policy.json
 
-    principals {
-      type        = "Service"
-      identifiers = ["pods.eks.amazonaws.com"] # Pure EKS service trust mechanism
-    }
+  tags = {
+    "eksctl.cluster.k8s.io/v1alpha1/cluster-name" = var.cluster_name
   }
+}
+
+resource "aws_iam_role_policy_attachment" "ap_abc_cred_role_policy_attach" {
+  role       = aws_iam_role.ap_abc_cred_role.name
+  policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite" # or create custom policy with minimal access
 }
 
 resource "aws_iam_role" "external_dns_role" {
   name               = "ExternalDnsControllerRole-${var.cluster_name}"
-  assume_role_policy = data.aws_iam_policy_document.external_dns_trust_policy.json
+  assume_role_policy = data.aws_iam_policy_document.eks_pod_identity_trust_policy.json
 
   tags = {
     "eksctl.cluster.k8s.io/v1alpha1/cluster-name" = var.cluster_name

@@ -58,6 +58,47 @@ data "aws_iam_policy_document" "assume_role_policy_oidc_provider" {
   }
 }
 
+# Configures a clean, cloud-native trust handshake targeting the EKS principal
+data "aws_iam_policy_document" "eks_pod_identity_trust_policy" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole", "sts:TagSession"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["pods.eks.amazonaws.com"] # Pure EKS service trust mechanism
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(var.oidc_provider_url, "https://", "")}:sub"
+      values = [
+        "system:serviceaccount:platform-system:external-dns-access",
+        "system:serviceaccount:httpbingo:ap-abc-sa"
+      ]
+    }
+  }
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Federated"
+      identifiers = ["arn:aws:iam::${var.AWS_ACC_ID}:oidc-provider/${var.oidc_provider}"]
+    }
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(var.oidc_provider_url, "https://", "")}:sub"
+      values = [
+        "system:serviceaccount:httpbingo:ap-abc-sa"
+      ]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(var.oidc_provider_url, "https://", "")}:aud"
+      values = ["sts.amazonaws.com"]
+    }
+  }
+}
+
 data "aws_iam_policy_document" "github_actions_role_policy_oidc_provider" {
   statement {
     effect = "Allow"
