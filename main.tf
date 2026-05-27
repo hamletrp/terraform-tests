@@ -493,7 +493,7 @@ resource "aws_iam_policy" "ack_eks_controller_role_iam_policy" {
       },{
         Effect = "Allow",
         Action = [ "iam:PassRole", "iam:GetRole"],
-        Resource = [aws_iam_role.external_dns_role.arn]
+        Resource = ["*"]
       }]
     }
   )
