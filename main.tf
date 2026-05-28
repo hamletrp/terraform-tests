@@ -532,8 +532,7 @@ resource "aws_iam_role" "external_dns_role" {
 # IAM policy to allow Route53 zone updates
 resource "aws_iam_policy" "external_dns_iam_policy" {
   name = "ExternalDNSControllerIAMPolicy"
-  policy = jsonencode(
-    {
+  policy = jsonencode({
       "Version" : "2012-10-17",
       "Statement" : [
         {
@@ -543,7 +542,19 @@ resource "aws_iam_policy" "external_dns_iam_policy" {
           ],
           "Resource" : [
             "arn:aws:route53:::hostedzone/*"
-          ]
+          ],
+          "Condition" : {
+            "StringEquals" : {
+              "aws:PrincipalTag/kubernetes-namespace" : [
+                "platform-system",
+                "httpbingo"
+              ],
+              "aws:PrincipalTag/kubernetes-service-account" : [
+                "external-dns-controller-sa",
+                "ap-abc-sa"
+              ]
+            }
+          }
         },
         {
           "Effect" : "Allow",
@@ -553,7 +564,19 @@ resource "aws_iam_policy" "external_dns_iam_policy" {
           ],
           "Resource" : [
             "*"
-          ]
+          ],
+          "Condition" : {
+            "StringEquals" : {
+              "aws:PrincipalTag/kubernetes-namespace" : [
+                "platform-system",
+                "httpbingo"
+              ],
+              "aws:PrincipalTag/kubernetes-service-account" : [
+                "external-dns-controller-sa",
+                "ap-abc-sa"
+              ]
+            }
+          }
         }
       ]
     }

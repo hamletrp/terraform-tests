@@ -63,18 +63,16 @@ data "aws_iam_policy_document" "eks_pod_identity_trust_policy" {
   statement {
     effect  = "Allow"
     actions = ["sts:AssumeRole", "sts:TagSession"]
-
     principals {
       type        = "Service"
       identifiers = ["pods.eks.amazonaws.com"] # Pure EKS service trust mechanism
     }
+
+    # narrows usage of this policy down to the cluster via control plane cluster role
     condition {
-      test     = "StringEquals"
-      variable = "${replace(var.oidc_provider_url, "https://", "")}:sub"
-      values = [
-        "system:serviceaccount:platform-system:external-dns-access",
-        "system:serviceaccount:httpbingo:ap-abc-sa"
-      ]
+      test     = "ArnEquals"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:eks:${var.AWS_REGION}:${var.AWS_ACC_ID}:cluster/${var.cluster_name}"]
     }
   }
   statement {
