@@ -542,6 +542,8 @@ resource "aws_iam_policy" "external_dns_iam_policy" {
           ],
           "Resource" : [
             "arn:aws:route53:::hostedzone/*"
+            #  "Resource": "arn:aws:route53:::hostedzone/PRIVATE_ZONE_ID"
+            #  "Resource": "arn:aws:route53:::hostedzone/PUBLIC_ZONE_ID"
           ],
           "Condition" : {
             "StringEquals" : {
@@ -1330,46 +1332,121 @@ resource "aws_launch_template" "eks_overlay_optimized" {
 }
 
 
-# # 1. Dynamically look up the EKS Node Security Group created by eksctl
-# data "aws_security_group" "eks_node_sg" {
-#   filter {
-#     name   = "tag:aws:eks:cluster-name"
-#     values = [var.cluster_name] # <-- Put your exact cluster name here
+## ECR VPC Endpoint
+# Security Group for ECR Interface Endpoints
+# resource "aws_security_group" "ecr_endpoints" {
+#   name        = "ecr-endpoints-sg"
+#   description = "Allow inbound HTTPS traffic from worker nodes to ECR endpoints"
+#   vpc_id      = var.vpc_id
+
+#   ingress {
+#     description     = "HTTPS from worker nodes"
+#     from_port       = 443
+#     to_port         = 443
+#     protocol        = "tcp"
+#     security_groups = [var.worker_node_sg_id] # Your EKS/ECS node security group
 #   }
-  
-#   filter {
-#     name   = "tag:kubernetes.io/cluster/${var.cluster_name}"
-#     values = ["owned"]
+
+#   egress {
+#     from_port        = 0
+#     to_port          = 0
+#     protocol         = "-1"
+#     cidr_blocks      = ["0.0.0.0/0"]
+#     cidr_blocks = [var.vpc_cidr_block] # e.g., "10.0.0.0/16"
+#   #   ipv6_cidr_blocks = ["::/0"]
+#   }
+
+#   tags = {
+#     Name = "ecr-endpoints-sg"
 #   }
 # }
 
-# locals {
-#   # Define the array of security group IDs attached to your NLB
-#   nlb_security_groups = [
-#     "sg-0738226ac0e81dcf8",
-#     "sg-0977d7fbd1ecfec3b"
-#   ]
+# # 1. ECR Docker Registry Endpoint (Handles auth and image pulls)
+# resource "aws_vpc_endpoint" "ecr_dkr" {
+#   vpc_id              = var.vpc_id
+#   service_name        = "com.amazonaws.${var.aws_region}.ecr.dkr"
+#   vpc_endpoint_type   = "Interface"
+#   subnet_ids          = var.private_subnet_ids
+#   security_group_ids  = [aws_security_group.ecr_endpoints.id]
+#   private_dns_enabled = true
+
+#   # Restricts actions strictly to your corporate account's ECR registries
+#   policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Sid       = "AllowECRImagePullsAndPushes"
+#         Effect    = "Allow"
+#         Principal = "*" # Controls network-level entry; IAM still validates individual identity
+#         Action = [
+#           "ecr:BatchCheckLayerAvailability",
+#           "ecr:GetDownloadUrlForLayer",
+#           "ecr:BatchGetImage",
+#           "ecr:PutImage",
+#           "ecr:InitiateLayerUpload",
+#           "ecr:UploadLayerPart",
+#           "ecr:CompleteLayerUpload"
+#         ]
+#         Resource = "arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/*"
+#       },
+#       {
+#         Sid       = "AllowECRAuthentication"
+#         Effect    = "Allow"
+#         Principal = "*"
+#         Action    = "ecr:GetAuthorizationToken"
+#         Resource  = "*" # GetAuthorizationToken requires "*" because it does not support resource-level permissions
+#       }
+#     ]
+#   })
+
+#   tags = {
+#     Name = "ecr-dkr-endpoint"
+#   }
 # }
 
-# 2. Attach the rule to the dynamically retrieved security group ID
+# # 2. ECR API Endpoint (Handles lifecycle actions and validations)
+# resource "aws_vpc_endpoint" "ecr_api" {
+#   vpc_id              = var.vpc_id
+#   service_name        = "com.amazonaws.${var.aws_region}.ecr.api"
+#   vpc_endpoint_type   = "Interface"
+#   subnet_ids          = var.private_subnet_ids
+#   security_group_ids  = [aws_security_group.ecr_endpoints.id]
+#   private_dns_enabled = true
 
-# # Dynamically provision an entry rule for each NLB security group
-# resource "aws_vpc_security_group_ingress_rule" "allow_nlb_to_traefik" {
-#   for_each = toset(local.nlb_security_groups)
+#   policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Sid       = "AllowECRAPIActions"
+#         Effect    = "Allow"
+#         Principal = "*"
+#         Action = [
+#           "ecr:DescribeRepositories",
+#           "ecr:ListImages",
+#           "ecr:DescribeImages"
+#         ]
+#         Resource = "arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/*"
+#       }
+#     ]
+#   })
 
-#   # Target: Your EKS Node Security Group
-#   security_group_id = data.aws_security_group.eks_node_sg.id
-
-#   # Source: Iterates through each group ID in the set
-#   referenced_security_group_id = each.value
-
-#   # Port Mapping for Traefik Application Listener
-#   ip_protocol = "tcp"
-#   from_port   = 8000
-#   to_port     = 8000
-
-#   description = "Allow NLB SG ${each.value} to hit Traefik pods over port 8000"
+#   tags = {
+#     Name = "ecr-api-endpoint"
+#   }
 # }
+
+# # 3. S3 Gateway Endpoint (Handles layer downloading from S3)
+# resource "aws_vpc_endpoint" "s3" {
+#   vpc_id            = var.vpc_id
+#   service_name      = "com.amazonaws.${var.aws_region}.s3"
+#   vpc_endpoint_type = "Gateway"
+#   route_table_ids   = var.private_route_table_ids # Injects routes into your subnet routing tables
+
+#   tags = {
+#     Name = "s3-gateway-endpoint"
+#   }
+# }
+
 
 
 
