@@ -1221,60 +1221,60 @@ resource "aws_iam_role_policy_attachment" "karpenter_sqs_policy_attachment" {
 #   vpc_peering_connection_id = aws_vpc_peering_connection.argocd_hub_spoke.id
 # }
 
-resource "helm_release" "aws_ebs_csi_driver" {
-  name       = "aws-ebs-csi-driver"
-  chart      = "aws-ebs-csi-driver"
-  repository = "https://kubernetes-sigs.github.io/aws-ebs-csi-driver"
-  namespace  = "kube-system"
-  version    = "2.45.1" 
+# resource "helm_release" "aws_ebs_csi_driver" {
+#   name       = "aws-ebs-csi-driver"
+#   chart      = "aws-ebs-csi-driver"
+#   repository = "https://kubernetes-sigs.github.io/aws-ebs-csi-driver"
+#   namespace  = "kube-system"
+#   version    = "2.45.1" 
   
-  create_namespace = false
+#   create_namespace = false
 
-  values = [
-    yamlencode({
-      controller = {
-        tolerations = [
-          {
-            key      = "workload-type"
-            operator = "Equal"
-            value    = "core"
-            effect   = "NoSchedule"
-          },
-          {
-            key      = "CriticalAddonsOnly"
-            operator = "Equal"
-            value    = "true"
-            effect   = "NoSchedule"
-          }
-        ]
-        serviceAccount = {
-          create = true
-          name   = "ebs-csi-controller-sa"
-          annotations = {
-            "eks.amazonaws.com/role-arn" = aws_iam_role.ebs_csi_driver_role.arn
-          }
-        }
-      }
+#   values = [
+#     yamlencode({
+#       controller = {
+#         tolerations = [
+#           {
+#             key      = "workload-type"
+#             operator = "Equal"
+#             value    = "core"
+#             effect   = "NoSchedule"
+#           },
+#           {
+#             key      = "CriticalAddonsOnly"
+#             operator = "Equal"
+#             value    = "true"
+#             effect   = "NoSchedule"
+#           }
+#         ]
+#         serviceAccount = {
+#           create = true
+#           name   = "ebs-csi-controller-sa"
+#           annotations = {
+#             "eks.amazonaws.com/role-arn" = aws_iam_role.ebs_csi_driver_role.arn
+#           }
+#         }
+#       }
 
-      node = {
-        tolerations = [
-          {
-            key      = "workload-type"
-            operator = "Equal"
-            value    = "core"
-            effect   = "NoSchedule"
-          },
-          {
-            key      = "CriticalAddonsOnly"
-            operator = "Equal"
-            value    = "true"
-            effect   = "NoSchedule"
-          }
-        ]
-      }
-    })
-  ]
-}
+#       node = {
+#         tolerations = [
+#           {
+#             key      = "workload-type"
+#             operator = "Equal"
+#             value    = "core"
+#             effect   = "NoSchedule"
+#           },
+#           {
+#             key      = "CriticalAddonsOnly"
+#             operator = "Equal"
+#             value    = "true"
+#             effect   = "NoSchedule"
+#           }
+#         ]
+#       }
+#     })
+#   ]
+# }
 
 resource "aws_iam_role" "github_actions_ecr_push_role" {
   name               = "gihub-actions-ecr-push-${var.environment}"
@@ -1330,6 +1330,29 @@ resource "aws_launch_template" "eks_overlay_optimized" {
     }
   }
 }
+
+
+# locals {
+#   rafay_cluster_name = "cluster-lab-13"
+# }
+# # rafay labs related resources
+# # 1. Create the Access Entry for the IAM Principal
+# resource "aws_eks_access_entry" "cluster_admin" {
+#   cluster_name  = local.rafay_cluster_name 
+#   principal_arn = "arn:aws:iam::722249351142:user/hamletrp"
+#   type          = "STANDARD"
+# }
+
+# # 2. Associate the AWS-managed Cluster Admin Policy
+# resource "aws_eks_access_policy_association" "cluster_admin_association" {
+#   cluster_name  = local.rafay_cluster_name
+#   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+#   principal_arn = aws_eks_access_entry.cluster_admin.principal_arn
+
+#   access_scope {
+#     type = "cluster"
+#   }
+# }
 
 
 ## ECR VPC Endpoint
